@@ -2,6 +2,25 @@ const { exec } = require("child_process")
 const fs = require("fs").promises
 const path = require("path")
 
+async function createDirectoryIfNotExists(directoryName) {
+  try {
+    await fs.access(directoryName) // Kiểm tra sự tồn tại của thư mục
+    console.log(`Thư mục ${directoryName} đã tồn tại.`)
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      // Thư mục không tồn tại, thực hiện tạo thư mục
+      try {
+        await fs.mkdir(directoryName)
+        console.log(`Thư mục ${directoryName} đã được tạo.`)
+      } catch (mkdirErr) {
+        console.error(`Lỗi khi tạo thư mục ${directoryName}: ${mkdirErr}`)
+      }
+    } else {
+      console.error(`Lỗi khi kiểm tra thư mục ${directoryName}: ${err}`)
+    }
+  }
+}
+
 async function deleteFilesInDirectory(directoryPath) {
   try {
     const files = await fs.readdir(directoryPath)
@@ -26,6 +45,7 @@ module.exports = class Sqlite3Process {
     this.recordNumber = 0
     this.promiseReady = null
     this.numberInFile = 100000
+    this.folderName = "output"
     this.start()
   }
 
@@ -33,7 +53,7 @@ module.exports = class Sqlite3Process {
     this.sqlite3Process.stdin.write(`.open BHHH.obk\n`)
 
     this.sqlite3Process.on("exit", () => {
-      console.log("Sqlite3 process exited.")
+      console.log("Process exited.")
       // this.kill()
       this.resolve({
         success: true,
@@ -41,7 +61,7 @@ module.exports = class Sqlite3Process {
       })
     })
     this.sqlite3Process.stdin.on("close", () => {
-      console.log("Generate data closed.")
+      console.log("Process stdin closed.")
     })
 
     this.sqlite3Process.stdout.on("data", (data) => {
@@ -84,12 +104,16 @@ module.exports = class Sqlite3Process {
     OFFSET ${offset};
     `
 
-    this.sqlite3Process.stdin.write(`.output output/${book_name}.json\n`)
+    this.sqlite3Process.stdin.write(
+      `.output ${this.folderName}/${book_name}.json\n`
+    )
     this.sqlite3Process.stdin.write(query + "\n")
   }
 
   async generate(file_name = "book") {
-    await deleteFilesInDirectory("output")
+    createDirectoryIfNotExists(this.folderName)
+
+    await deleteFilesInDirectory(this.folderName)
 
     await this.waitingReady()
 
